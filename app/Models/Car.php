@@ -21,4 +21,12 @@ class Car extends Model
     'description',
     'is_sold'
     ];
+
+
+    // ... внутри класса Car
+
+public function images()
+{
+    return $this->hasMany(CarImage::class);
+}
 }

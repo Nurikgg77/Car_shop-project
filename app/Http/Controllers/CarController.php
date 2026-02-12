@@ -3,16 +3,19 @@
 namespace App\Http\Controllers;
 
 use App\Models\Car;
+use App\Models\CarImage; // Модель для галереи
+use App\Models\Banner;   // Модель для слайдера
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Storage; // Нужно для удаления старых картинок
+use Illuminate\Support\Facades\Storage; // Для работы с файлами
 
 class CarController extends Controller
 {
     /**
-     * Главная страница (Каталог с фильтрами)
+     * Главная страница (Каталог + Фильтры + Баннеры)
      */
     public function index(Request $request)
     {
+        // --- 1. ФИЛЬТРАЦИЯ И СОРТИРОВКА ---
         $query = Car::query();
 
         // Фильтры
@@ -46,29 +49,33 @@ class CarController extends Controller
             case 'oldest':
                 $query->orderBy('year', 'asc');
                 break;
-            case 'newest': // Явно указали, но можно и default
+            case 'newest':
             default:
-                $query->latest(); // Сначала новые добавления
+                $query->latest(); // Сначала новые
                 break;
         }
 
         $cars = $query->get();
 
-        // Данные для выпадающих списков фильтра
+        // --- 2. ДАННЫЕ ДЛЯ ВЫПАДАЮЩИХ СПИСКОВ ---
         $brands = Car::select('brand')->distinct()->orderBy('brand')->pluck('brand');
         
-        // Модели зависят от выбранной марки (если выбрана)
         $modelsQuery = Car::select('model')->distinct()->orderBy('model');
         if ($request->filled('brand')) {
             $modelsQuery->where('brand', $request->brand);
         }
         $models = $modelsQuery->pluck('model');
 
-        return view('cars.index', compact('cars', 'brands', 'models'));
+        // --- 3. РЕКЛАМА (ТОЛЬКО СЛАЙДЕР) ---
+        $banners = Banner::where('is_active', true)->latest()->get();
+        
+        // Убрали переменную $popup
+
+        return view('cars.index', compact('cars', 'brands', 'models', 'banners'));
     }
 
     /**
-     * Форма создания машины
+     * Форма создания
      */
     public function create()
     {
@@ -83,7 +90,8 @@ class CarController extends Controller
         $validatedData = $request->validate([
             'brand' => 'required|string|max:50',
             'model' => 'required|string|max:50',
-            'image' => 'nullable|image|mimes:jpeg,png,jpg,gif|max:2048',
+            'image' => 'nullable|image|mimes:jpeg,png,jpg,webp|max:5000',
+            'photos.*' => 'image|mimes:jpeg,png,jpg,webp|max:5000',
             'year'  => 'required|integer|min:1900|max:'.(date('Y')+1),
             'price' => 'required|numeric|min:0',
             'mileage' => 'nullable|integer|min:0',
@@ -96,16 +104,24 @@ class CarController extends Controller
             $validatedData['image'] = $path;
         }
 
-        Car::create($validatedData);
+        $car = Car::create($validatedData);
+
+        if ($request->hasFile('photos')) {
+            foreach ($request->file('photos') as $photo) {
+                $galleryPath = $photo->store('cars_gallery', 'public');
+                $car->images()->create(['image_path' => $galleryPath]);
+            }
+        }
 
         return redirect()->route('cars.index')->with('success', 'Машина успешно добавлена!');
     }
 
     /**
-     * Просмотр конкретной машины (ЭТОГО МЕТОДА НЕ ХВАТАЛО)
+     * Просмотр машины
      */
     public function show(Car $car)
     {
+        $car->load('images');
         return view('cars.show', compact('car'));
     }
 
@@ -118,14 +134,15 @@ class CarController extends Controller
     }
 
     /**
-     * Обновление данных машины
+     * Обновление данных
      */
     public function update(Request $request, Car $car)
     {
         $validatedData = $request->validate([
             'brand' => 'required|string|max:50',
             'model' => 'required|string|max:50',
-            'image' => 'nullable|image|max:2048',
+            'image' => 'nullable|image|max:5000',
+            'photos.*' => 'image|max:5000',
             'year'  => 'required|integer',
             'price' => 'required|numeric',
             'mileage' => 'nullable|integer',
@@ -135,16 +152,21 @@ class CarController extends Controller
         ]);
 
         if ($request->hasFile('image')) {
-            // Если загружаем новое фото, старое можно удалить (по желанию)
             if ($car->image) {
                 Storage::disk('public')->delete($car->image);
             }
-            
             $path = $request->file('image')->store('cars', 'public');
             $validatedData['image'] = $path;
         }
 
         $car->update($validatedData);
+
+        if ($request->hasFile('photos')) {
+            foreach ($request->file('photos') as $photo) {
+                $galleryPath = $photo->store('cars_gallery', 'public');
+                $car->images()->create(['image_path' => $galleryPath]);
+            }
+        }
 
         return redirect()->route('cars.show', $car->id)->with('success', 'Данные обновлены!');
     }
@@ -154,9 +176,12 @@ class CarController extends Controller
      */
     public function destroy(Car $car)
     {
-        // Удаляем картинку, если она была
         if ($car->image) {
             Storage::disk('public')->delete($car->image);
+        }
+
+        foreach ($car->images as $galleryImage) {
+            Storage::disk('public')->delete($galleryImage->image_path);
         }
 
         $car->delete();

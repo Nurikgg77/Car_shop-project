@@ -1,4 +1,4 @@
-@extends('layout')
+@extends('admin_layout')
 
 @section('title', 'Добавить автомобиль')
 
@@ -22,7 +22,7 @@
                     </div>
                 @endif
 
-                <!-- Форма с загрузкой файлов -->
+                <!-- ВАЖНО: enctype для загрузки файлов -->
                 <form action="{{ route('cars.store') }}" method="POST" enctype="multipart/form-data">
                     @csrf
 
@@ -37,11 +37,24 @@
                         </div>
                     </div>
 
-                    <!-- Поле Фото -->
-                    <div class="mb-3">
-                        <label for="image" class="form-label">Фото автомобиля</label>
-                        <input type="file" class="form-control" name="image" id="image" accept="image/*">
-                        <div class="form-text">Поддерживаются jpg, png, jpeg. Макс. 2МБ.</div>
+                    <!-- Блок ФОТО -->
+                    <div class="p-3 mb-4 bg-light rounded border">
+                        <h6 class="fw-bold mb-3">📸 Фотографии</h6>
+                        
+                        <!-- 1. Главное фото -->
+                        <div class="mb-3">
+                            <label for="image" class="form-label">Главное фото (Обложка)</label>
+                            <input type="file" class="form-control" name="image" id="image" accept="image/*">
+                            <div class="form-text">Это фото будет видно в каталоге.</div>
+                        </div>
+
+                        <!-- 2. Галерея (Мультизагрузка) -->
+                        <div class="mb-3">
+                            <label for="photos" class="form-label">Дополнительные фото (Галерея)</label>
+                            <!-- name="photos[]" и multiple - ключевые моменты -->
+                            <input type="file" class="form-control" name="photos[]" id="photos" multiple accept="image/*">
+                            <div class="form-text text-primary">💡 Совет: Зажмите <strong>Ctrl</strong> (или Cmd), чтобы выбрать сразу много файлов.</div>
+                        </div>
                     </div>
 
                     <div class="row mb-3">
@@ -59,7 +72,7 @@
                         </div>
                     </div>
 
-                    <!-- Выбор Цвета (Dropdown) -->
+                    <!-- Выбор Цвета -->
                     <div class="mb-3">
                         <label for="color" class="form-label">Цвет автомобиля</label>
                         @php
